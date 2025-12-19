@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import {
   LayoutDashboard,
@@ -260,7 +260,7 @@ export default function DashboardLayout() {
           </div>
         </aside>
       )}
-      <main className="p-6 h-full overflow-y-auto">
+      <main className="p-3 sm:p-6 h-full overflow-y-auto">
         <Section
           name={active}
           collapsed={collapsed}
@@ -862,8 +862,24 @@ function Section({
   // rows removed with Files&Data page
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [ordersShopee, setOrdersShopee] = useState<Row[]>([])
-  const [ordersTiktok, setOrdersTiktok] = useState<Row[]>([])
+  const [ordersShopee, setOrdersShopee] = useState<Row[]>(() => {
+    try {
+      const s = localStorage.getItem('ordersShopee') ?? '[]'
+      const p = JSON.parse(s)
+      return Array.isArray(p) ? p : []
+    } catch {
+      return []
+    }
+  })
+  const [ordersTiktok, setOrdersTiktok] = useState<Row[]>(() => {
+    try {
+      const s = localStorage.getItem('ordersTiktok') ?? '[]'
+      const p = JSON.parse(s)
+      return Array.isArray(p) ? p : []
+    } catch {
+      return []
+    }
+  })
   const [importingShopee, setImportingShopee] = useState(false)
   const [importingTiktok, setImportingTiktok] = useState(false)
   const [, setErrorShopee] = useState<string | null>(null)
@@ -876,7 +892,15 @@ function Section({
     qty: number
     image_url: string | null
   }
-  const [products, setProducts] = useState<ProductItem[]>([])
+  const [products, setProducts] = useState<ProductItem[]>(() => {
+    try {
+      const s = localStorage.getItem('products') ?? '[]'
+      const p = JSON.parse(s)
+      return Array.isArray(p) ? p : []
+    } catch {
+      return []
+    }
+  })
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<ProductItem | null>(null)
   const [searchText, setSearchText] = useState('')
@@ -894,7 +918,58 @@ function Section({
   const [orderSearchText, setOrderSearchText] = useState('')
   const [orderSearchScope, setOrderSearchScope] = useState<'order' | 'buyer' | 'product' | 'all'>('order')
   const [showAddSale, setShowAddSale] = useState(false)
-  const [cashFlowRows, setCashFlowRows] = useState<Row[]>([])
+  const [cashFlowRows, setCashFlowRows] = useState<Row[]>(() => {
+    try {
+      const s = localStorage.getItem('cashFlowRows') ?? '[]'
+      const p = JSON.parse(s)
+      return Array.isArray(p) ? p : []
+    } catch {
+      return []
+    }
+  })
+  
+  useEffect(() => {
+    try { localStorage.setItem('ordersShopee', JSON.stringify(ordersShopee)) } catch { /* noop */ }
+  }, [ordersShopee])
+  useEffect(() => {
+    try { localStorage.setItem('ordersTiktok', JSON.stringify(ordersTiktok)) } catch { /* noop */ }
+  }, [ordersTiktok])
+  useEffect(() => {
+    try { localStorage.setItem('cashFlowRows', JSON.stringify(cashFlowRows)) } catch { /* noop */ }
+  }, [cashFlowRows])
+  useEffect(() => {
+    try { localStorage.setItem('products', JSON.stringify(products)) } catch { /* noop */ }
+  }, [products])
+  
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      if (!isSupabaseConfigured) return
+      if (products.length > 0) return
+      try {
+        let rows: any[] = []
+        const q1 = await supabase!.from('inventory').select('product, qty, image_url, category, type')
+        if (q1.error) {
+          const q2 = await supabase!.from('inventory').select('product, qty, image_url')
+          if (!q2.error) rows = q2.data ?? []
+        } else {
+          rows = q1.data ?? []
+        }
+        if (active && Array.isArray(rows) && rows.length) {
+          const mapped = rows.map((r: any) => ({
+            id: String(r.product ?? ''),
+            category: String(r.category ?? ''),
+            type: String(r.type ?? ''),
+            product: String(r.product ?? ''),
+            qty: Number(r.qty ?? 0),
+            image_url: r.image_url ?? null,
+          }))
+          if (mapped.some(m => m.product)) setProducts(mapped)
+        }
+      } catch { /* noop */ }
+    })()
+    return () => { active = false }
+  }, [isSupabaseConfigured])
   const [importingCashFlow, setImportingCashFlow] = useState(false)
   const [errorCashFlow, setErrorCashFlow] = useState<string | null>(null)
   const [kosiedonTab, setKosiedonTab] = useState<'Cutted' | 'Returned'>('Returned')
@@ -1741,7 +1816,7 @@ function Section({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card text-card-foreground p-6">
+    <div className="rounded-lg border border-border bg-card text-card-foreground p-3 sm:p-6">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
