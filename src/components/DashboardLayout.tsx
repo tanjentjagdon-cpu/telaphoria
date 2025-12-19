@@ -51,7 +51,9 @@ const NAV_ITEMS: NavKey[] = [
 
 export default function DashboardLayout() {
   const [active, setActive] = useState<NavKey>('Dashboard')
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  )
   const [isDark, setIsDark] = useState(() =>
     typeof document !== 'undefined'
       ? document.documentElement.classList.contains('dark')
@@ -89,7 +91,7 @@ export default function DashboardLayout() {
 
   return (
     <div
-      className={`h-screen overflow-hidden bg-background text-foreground grid ${
+      className={`min-h-screen overflow-x-hidden bg-background text-foreground grid ${
         collapsed ? 'md:grid-cols-[1fr]' : 'md:grid-cols-[240px_1fr]'
       }`}
     >
@@ -3232,7 +3234,7 @@ function Section({
                   No data loaded. Import a CashFlow Excel file.
                 </div>
               ) : (
-                <div className="rounded-md border border-border overflow-auto max-h-[600px]">
+                <div className="rounded-md border border-border overflow-auto overflow-x-auto max-h-[600px]">
                   <table className="w-full text-sm">
                     <thead className="bg-muted text-muted-foreground sticky top-0 z-10">
                       <tr>
@@ -3280,7 +3282,7 @@ function Section({
               <div className="text-xs text-muted-foreground">
                 ShopTax entries from sales
               </div>
-              <div className="rounded-md border border-border bg-background max-h-[60vh] overflow-auto">
+              <div className="rounded-md border border-border bg-background max-h-[60vh] overflow-auto overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-muted">
                     <tr>
@@ -3365,7 +3367,7 @@ function Section({
               <div className="text-xs text-muted-foreground">
                 {kosiedonTab} orders from OrderSales
               </div>
-              <div className="rounded-md border border-border bg-background max-h-[60vh] overflow-auto">
+              <div className="rounded-md border border-border bg-background max-h-[60vh] overflow-auto overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-muted">
                     <tr>
