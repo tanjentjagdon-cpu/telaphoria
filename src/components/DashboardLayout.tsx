@@ -442,19 +442,22 @@ function AddCuttedModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-card text-card-foreground shadow-lg">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <div className="font-medium">Add Cutted Item</div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-border bg-muted px-2 py-1 text-sm"
-          >
-            Close
-          </button>
-        </div>
-        <form onSubmit={onSubmit} className="p-4 space-y-3">
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 overflow-y-auto">
+        <div className="min-h-full flex items-start sm:items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-lg rounded-lg border border-border bg-card text-card-foreground shadow-lg max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
+              <div className="font-medium">Add Cutted Item</div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md border border-border bg-muted px-2 py-1 text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <form onSubmit={onSubmit} className="p-3 sm:p-4 space-y-3 overflow-y-auto">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Category</label>
             <select
@@ -524,6 +527,8 @@ function AddCuttedModal({
             </button>
           </div>
         </form>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -626,9 +631,10 @@ function AddSaleModal({
       tabIndex={-1}
     >
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-3xl rounded-lg border border-border bg-card text-card-foreground shadow-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+      <div className="absolute inset-0 overflow-y-auto">
+        <div className="min-h-full flex items-start sm:items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-3xl rounded-lg border border-border bg-card text-card-foreground shadow-lg max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
             <div className="font-medium">Add Sale ({platform})</div>
             <button
               type="button"
@@ -638,8 +644,8 @@ function AddSaleModal({
               Close
             </button>
           </div>
-          <form onSubmit={onSubmit} className="p-4 space-y-3">
-            <div className="flex items-center gap-2">
+          <form onSubmit={onSubmit} className="p-3 sm:p-4 space-y-3 overflow-y-auto">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setTab('order')}
@@ -960,6 +966,7 @@ function AddSaleModal({
           </form>
         </div>
       </div>
+    </div>
     </div>
   )
 }
@@ -2512,9 +2519,10 @@ function Section({
             {showAddModal && (
               <div className="fixed inset-0 z-50">
                 <div className="absolute inset-0 bg-black/50" onClick={() => setShowAddModal(false)} />
-                <div className="absolute inset-0 flex items-center justify-center p-4">
-                  <div className="w-full max-w-3xl rounded-lg border border-border bg-card text-card-foreground shadow-lg overflow-hidden">
-                    <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                <div className="absolute inset-0 overflow-y-auto">
+                  <div className="min-h-full flex items-start sm:items-center justify-center p-3 sm:p-4">
+                    <div className="w-full max-w-3xl rounded-lg border border-border bg-card text-card-foreground shadow-lg max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
                       <div className="font-medium">Add Expenses</div>
                       <button
                         type="button"
@@ -2525,7 +2533,7 @@ function Section({
                         Close
                       </button>
                     </div>
-                    <div className="p-4 space-y-3">
+                    <div className="p-3 sm:p-4 space-y-3 overflow-y-auto">
                       {addMode === 'Product' ? (
                         <>
                           {(() => {
@@ -2705,6 +2713,7 @@ function Section({
                           </div>
                         </>
                       )}
+                    </div>
                     </div>
                   </div>
                 </div>
@@ -2962,9 +2971,12 @@ function Section({
             )}
 
             {editingOrder && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                <div className="w-full max-w-3xl rounded-lg border border-border bg-card text-card-foreground overflow-hidden">
-                  <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="fixed inset-0 z-50">
+                <div className="absolute inset-0 bg-black/50" onClick={() => setEditingOrder(null)} />
+                <div className="absolute inset-0 overflow-y-auto">
+                  <div className="min-h-full flex items-start sm:items-center justify-center p-3 sm:p-4">
+                    <div className="w-full max-w-3xl rounded-lg border border-border bg-card text-card-foreground max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
+                  <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
                     <div className="font-medium">Order {editingOrder.orderId}</div>
                     <button
                       type="button"
@@ -2975,7 +2987,7 @@ function Section({
                       Close
                     </button>
                   </div>
-                  <div className="p-4 space-y-4">
+                  <div className="p-3 sm:p-4 space-y-4 overflow-y-auto">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
@@ -3304,6 +3316,8 @@ function Section({
                         Close
                       </button>
                     </div>
+                  </div>
+                </div>
                   </div>
                 </div>
               </div>
@@ -3725,9 +3739,10 @@ function InventoryModal({
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-lg rounded-lg border border-border bg-card text-card-foreground shadow-lg">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+      <div className="absolute inset-0 overflow-y-auto">
+        <div className="min-h-full flex items-start sm:items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-lg rounded-lg border border-border bg-card text-card-foreground shadow-lg max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
             <div className="font-medium">{initial ? 'Edit Product' : 'Add Product'}</div>
             <button
               type="button"
@@ -3737,7 +3752,7 @@ function InventoryModal({
               Close
             </button>
           </div>
-          <form onSubmit={onSubmit} className="p-4 space-y-3">
+          <form onSubmit={onSubmit} className="p-3 sm:p-4 space-y-3 overflow-y-auto">
             <div className="grid md:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Category</label>
@@ -3816,6 +3831,7 @@ function InventoryModal({
           </form>
         </div>
       </div>
+        </div>
     </div>
   )
 }
