@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import {
   LayoutDashboard,
@@ -51,9 +51,19 @@ const NAV_ITEMS: NavKey[] = [
 
 export default function DashboardLayout() {
   const [active, setActive] = useState<NavKey>('Dashboard')
-  const [collapsed, setCollapsed] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
-  )
+  const [collapsed, setCollapsed] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false))
+  const scrollLock = useRef<{
+    overflow: string
+    position: string
+    top: string
+    left: string
+    right: string
+    width: string
+    paddingRight: string
+    scrollY: number
+  } | null>(null)
   const [isDark, setIsDark] = useState(() =>
     typeof document !== 'undefined'
       ? document.documentElement.classList.contains('dark')
@@ -76,6 +86,265 @@ export default function DashboardLayout() {
     setIsDark(dark)
   }
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onResize = () => {
+      const next = window.innerWidth < 768
+      setIsMobile(next)
+      if (!next) setMobileSidebarOpen(false)
+    }
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+
+    const unlock = () => {
+      const prev = scrollLock.current
+      if (!prev) return
+      scrollLock.current = null
+      const body = document.body
+      body.style.overflow = prev.overflow
+      body.style.position = prev.position
+      body.style.top = prev.top
+      body.style.left = prev.left
+      body.style.right = prev.right
+      body.style.width = prev.width
+      body.style.paddingRight = prev.paddingRight
+      window.scrollTo(0, prev.scrollY)
+    }
+
+    const lock = () => {
+      if (scrollLock.current) return
+      const body = document.body
+      const scrollY = window.scrollY || 0
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+      scrollLock.current = {
+        overflow: body.style.overflow,
+        position: body.style.position,
+        top: body.style.top,
+        left: body.style.left,
+        right: body.style.right,
+        width: body.style.width,
+        paddingRight: body.style.paddingRight,
+        scrollY,
+      }
+      body.style.overflow = 'hidden'
+      body.style.position = 'fixed'
+      body.style.top = `-${scrollY}px`
+      body.style.left = '0'
+      body.style.right = '0'
+      body.style.width = '100%'
+      body.style.paddingRight = scrollbarWidth > 0 ? `${scrollbarWidth}px` : body.style.paddingRight
+    }
+
+    if (!isMobile) {
+      unlock()
+      return
+    }
+    if (mobileSidebarOpen) {
+      lock()
+      return unlock
+    }
+    unlock()
+  }, [isMobile, mobileSidebarOpen])
+
+  const toggleSidebar = () => {
+    if (isMobile) {
+      setMobileSidebarOpen(o => !o)
+      return
+    }
+    setCollapsed(c => !c)
+  }
+
+  function renderSidebarContent(mode: 'mobile' | 'desktop') {
+    const closeIfMobile = () => {
+      if (mode === 'mobile') setMobileSidebarOpen(false)
+    }
+
+    return (
+      <>
+        <div className="border-b border-sidebar-border px-4 py-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="text-lg font-semibold">TPIMS</div>
+            <div className="text-xs text-muted-foreground">Control Panel</div>
+          </div>
+        </div>
+        <nav className="p-2 space-y-1 flex-1 overflow-y-auto">
+          {NAV_ITEMS.map(item => {
+            const isActive = active === item
+            if (item === 'Finance') {
+              const financeActive = active === 'Expenses' || active === 'CashFlow' || active === 'Taxation'
+              return (
+                <div key="Finance-root" className="space-y-1">
+                  <button
+                    onClick={() => {
+                      setFinanceOpen(o => !o)
+                    }}
+                    title="Finance"
+                    className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center justify-between ${
+                      financeActive
+                        ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
+                        : 'bg-transparent border-transparent hover:bg-muted'
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-4 w-4">{ICONS['Finance']}</span>
+                      <span className="font-medium">Finance</span>
+                    </span>
+                    <span className="text-xs">{financeOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {financeOpen && (
+                    <div className="pl-8 space-y-1">
+                      <button
+                        onClick={() => {
+                          setActive('Expenses')
+                          closeIfMobile()
+                        }}
+                        title="Expenses"
+                        className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
+                          active === 'Expenses'
+                            ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
+                            : 'bg-transparent border-transparent hover:bg-muted'
+                        }`}
+                      >
+                        <Wallet className="h-4 w-4" />
+                        <span className="text-sm">Expenses</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActive('CashFlow')
+                          closeIfMobile()
+                        }}
+                        title="CashFlow"
+                        className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
+                          active === 'CashFlow'
+                            ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
+                            : 'bg-transparent border-transparent hover:bg-muted'
+                        }`}
+                      >
+                        <TrendingUp className="h-4 w-4" />
+                        <span className="text-sm">CashFlow</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActive('Taxation')
+                          closeIfMobile()
+                        }}
+                        title="Taxation"
+                        className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
+                          active === 'Taxation'
+                            ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
+                            : 'bg-transparent border-transparent hover:bg-muted'
+                        }`}
+                      >
+                        <FileText className="h-4 w-4" />
+                        <span className="text-sm">Taxation</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            if (item === 'OrderSales') {
+              const rootActive = active === 'OrderSales'
+              return (
+                <div key="OrderSales-root" className="space-y-1">
+                  <button
+                    onClick={() => {
+                      setActive('OrderSales')
+                      setOrderSalesOpen(o => !o)
+                    }}
+                    title="OrderSales"
+                    className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center justify-between ${
+                      rootActive
+                        ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
+                        : 'bg-transparent border-transparent hover:bg-muted'
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-4 w-4">{ICONS['OrderSales']}</span>
+                      <span className="font-medium">OrderSales</span>
+                    </span>
+                    <span className="text-xs">{orderSalesOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {orderSalesOpen && (
+                    <div className="pl-8 space-y-1">
+                      <button
+                        onClick={() => {
+                          setActive('OrderSales')
+                          setOrderSalesSub('Shopee')
+                          closeIfMobile()
+                        }}
+                        title="Shopee"
+                        className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
+                          rootActive && orderSalesSub === 'Shopee'
+                            ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
+                            : 'bg-transparent border-transparent hover:bg-muted'
+                        }`}
+                      >
+                        <Store className="h-4 w-4" />
+                        <span className="text-sm">Shopee</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActive('OrderSales')
+                          setOrderSalesSub('Tiktok')
+                          closeIfMobile()
+                        }}
+                        title="Tiktok"
+                        className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
+                          rootActive && orderSalesSub === 'Tiktok'
+                            ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
+                            : 'bg-transparent border-transparent hover:bg-muted'
+                        }`}
+                      >
+                        <Music2 className="h-4 w-4" />
+                        <span className="text-sm">Tiktok</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            return (
+              <button
+                key={item}
+                onClick={() => {
+                  setActive(item)
+                  closeIfMobile()
+                }}
+                title={item}
+                className={`w-full rounded-md border transition-colors text-left px-3 py-2 flex items-center gap-2 ${
+                  isActive
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
+                    : 'bg-transparent border-transparent hover:bg-muted'
+                }`}
+              >
+                <span className="h-4 w-4">{ICONS[item]}</span>
+                <span className="font-medium">{item}</span>
+              </button>
+            )
+          })}
+        </nav>
+        <div className="mt-auto p-2 border-t border-sidebar-border shrink-0">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full rounded-md bg-destructive text-destructive-foreground px-3 py-2 text-sm"
+            title="Logout"
+          >
+            Logout
+          </button>
+        </div>
+      </>
+    )
+  }
+
   const ICONS: Record<NavKey, ReactNode> = {
     Dashboard: <LayoutDashboard className="h-4 w-4" />,
     Inventory: <Package className="h-4 w-4" />,
@@ -91,182 +360,33 @@ export default function DashboardLayout() {
 
   return (
     <div
-      className={`min-h-screen overflow-x-hidden bg-background text-foreground grid ${
+      className={`min-h-screen overflow-x-hidden bg-background text-foreground relative md:grid ${
         collapsed ? 'md:grid-cols-[1fr]' : 'md:grid-cols-[240px_1fr]'
       }`}
     >
       {!collapsed && (
-        <aside className="bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col h-full">
-          <div className="border-b border-sidebar-border px-4 py-3 shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="text-lg font-semibold">TPIMS</div>
-              <div className="text-xs text-muted-foreground">Control Panel</div>
-            </div>
-          </div>
-          <nav className="p-2 space-y-1 flex-1 overflow-y-auto">
-            {NAV_ITEMS.map(item => {
-              const isActive = active === item
-              if (item === 'Finance') {
-                const financeActive = active === 'Expenses' || active === 'CashFlow' || active === 'Taxation'
-                return (
-                  <div key="Finance-root" className="space-y-1">
-                    <button
-                      onClick={() => {
-                        setFinanceOpen(o => !o)
-                      }}
-                      title="Finance"
-                      className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center justify-between ${
-                        financeActive
-                          ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
-                          : 'bg-transparent border-transparent hover:bg-muted'
-                      }`}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-4 w-4">{ICONS['Finance']}</span>
-                        <span className="font-medium">Finance</span>
-                      </span>
-                      <span className="text-xs">
-                        {financeOpen ? '▾' : '▸'}
-                      </span>
-                    </button>
-                    {financeOpen && (
-                      <div className="pl-8 space-y-1">
-                        <button
-                          onClick={() => setActive('Expenses')}
-                          title="Expenses"
-                          className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
-                            active === 'Expenses'
-                              ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
-                              : 'bg-transparent border-transparent hover:bg-muted'
-                          }`}
-                        >
-                          <Wallet className="h-4 w-4" />
-                          <span className="text-sm">Expenses</span>
-                        </button>
-                        <button
-                          onClick={() => setActive('CashFlow')}
-                          title="CashFlow"
-                          className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
-                            active === 'CashFlow'
-                              ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
-                              : 'bg-transparent border-transparent hover:bg-muted'
-                          }`}
-                        >
-                          <TrendingUp className="h-4 w-4" />
-                          <span className="text-sm">CashFlow</span>
-                        </button>
-                        <button
-                          onClick={() => setActive('Taxation')}
-                          title="Taxation"
-                          className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
-                            active === 'Taxation'
-                              ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
-                              : 'bg-transparent border-transparent hover:bg-muted'
-                          }`}
-                        >
-                          <FileText className="h-4 w-4" />
-                          <span className="text-sm">Taxation</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              }
-              if (item === 'OrderSales') {
-                const rootActive = active === 'OrderSales'
-                return (
-                  <div key="OrderSales-root" className="space-y-1">
-                    <button
-                      onClick={() => {
-                        setActive('OrderSales')
-                        setOrderSalesOpen(o => !o)
-                      }}
-                      title="OrderSales"
-                      className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center justify-between ${
-                        rootActive
-                          ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
-                          : 'bg-transparent border-transparent hover:bg-muted'
-                      }`}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-4 w-4">{ICONS['OrderSales']}</span>
-                        <span className="font-medium">OrderSales</span>
-                      </span>
-                      <span className="text-xs">
-                        {orderSalesOpen ? '▾' : '▸'}
-                      </span>
-                    </button>
-                    {orderSalesOpen && (
-                      <div className="pl-8 space-y-1">
-                        <button
-                          onClick={() => {
-                            setActive('OrderSales')
-                            setOrderSalesSub('Shopee')
-                          }}
-                          title="Shopee"
-                          className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
-                            rootActive && orderSalesSub === 'Shopee'
-                              ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
-                              : 'bg-transparent border-transparent hover:bg-muted'
-                          }`}
-                        >
-                          <Store className="h-4 w-4" />
-                          <span className="text-sm">Shopee</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setActive('OrderSales')
-                            setOrderSalesSub('Tiktok')
-                          }}
-                          title="Tiktok"
-                          className={`w-full rounded-md border transition-colors px-3 py-2 flex items-center gap-2 ${
-                            rootActive && orderSalesSub === 'Tiktok'
-                              ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
-                              : 'bg-transparent border-transparent hover:bg-muted'
-                          }`}
-                        >
-                          <Music2 className="h-4 w-4" />
-                          <span className="text-sm">Tiktok</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              }
-              return (
-                <button
-                  key={item}
-                  onClick={() => setActive(item)}
-                  title={item}
-                  className={`w-full rounded-md border transition-colors text-left px-3 py-2 flex items-center gap-2 ${
-                    isActive
-                      ? 'bg-sidebar-primary text-sidebar-primary-foreground border-transparent'
-                      : 'bg-transparent border-transparent hover:bg-muted'
-                  }`}
-                >
-                  <span className="h-4 w-4">{ICONS[item]}</span>
-                  <span className="font-medium">{item}</span>
-                </button>
-              )
-            })}
-          </nav>
-          <div className="mt-auto p-2 border-t border-sidebar-border shrink-0">
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="w-full rounded-md bg-destructive text-destructive-foreground px-3 py-2 text-sm"
-              title="Logout"
-            >
-              Logout
-            </button>
-          </div>
+        <aside className="hidden md:flex bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex-col h-screen sticky top-0">
+          {renderSidebarContent('desktop')}
         </aside>
       )}
-      <main className="p-3 sm:p-6 h-full overflow-y-auto">
+      <div className={`md:hidden fixed inset-0 z-40 ${mobileSidebarOpen ? '' : 'pointer-events-none'}`}>
+        <div
+          className={`absolute inset-0 bg-black/50 transition-opacity ${mobileSidebarOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+        <aside
+          className={`absolute left-0 top-0 h-full w-72 max-w-[80vw] bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col transform transition-transform duration-200 ${
+            mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          {renderSidebarContent('mobile')}
+        </aside>
+      </div>
+      <main className="p-3 sm:p-6 min-h-screen md:min-h-0 md:h-screen md:overflow-y-auto overflow-x-hidden">
         <Section
           name={active}
-          collapsed={collapsed}
-          onToggle={() => setCollapsed(c => !c)}
+          collapsed={isMobile ? !mobileSidebarOpen : collapsed}
+          onToggle={toggleSidebar}
           isDark={isDark}
           onToggleDark={() => applyTheme(!isDark)}
           orderSalesSub={orderSalesSub}
@@ -843,8 +963,6 @@ function AddSaleModal({
     </div>
   )
 }
-// removed header; control lives inside main content
-
 function Section({
   name,
   collapsed,
@@ -861,7 +979,6 @@ function Section({
   orderSalesSub: 'Shopee' | 'Tiktok'
 }) {
   type Row = Record<string, string | number | boolean | null>
-  // rows removed with Files&Data page
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ordersShopee, setOrdersShopee] = useState<Row[]>(() => {
@@ -931,16 +1048,16 @@ function Section({
   })
   
   useEffect(() => {
-    try { localStorage.setItem('ordersShopee', JSON.stringify(ordersShopee)) } catch { /* noop */ }
+    try { localStorage.setItem('ordersShopee', JSON.stringify(ordersShopee)) } catch { void 0 }
   }, [ordersShopee])
   useEffect(() => {
-    try { localStorage.setItem('ordersTiktok', JSON.stringify(ordersTiktok)) } catch { /* noop */ }
+    try { localStorage.setItem('ordersTiktok', JSON.stringify(ordersTiktok)) } catch { void 0 }
   }, [ordersTiktok])
   useEffect(() => {
-    try { localStorage.setItem('cashFlowRows', JSON.stringify(cashFlowRows)) } catch { /* noop */ }
+    try { localStorage.setItem('cashFlowRows', JSON.stringify(cashFlowRows)) } catch { void 0 }
   }, [cashFlowRows])
   useEffect(() => {
-    try { localStorage.setItem('products', JSON.stringify(products)) } catch { /* noop */ }
+    try { localStorage.setItem('products', JSON.stringify(products)) } catch { void 0 }
   }, [products])
   
   useEffect(() => {
@@ -949,29 +1066,35 @@ function Section({
       if (!isSupabaseConfigured) return
       if (products.length > 0) return
       try {
-        let rows: any[] = []
+        let rows: Array<Record<string, unknown>> = []
         const q1 = await supabase!.from('inventory').select('product, qty, image_url, category, type')
-        if (q1.error) {
-          const q2 = await supabase!.from('inventory').select('product, qty, image_url')
-          if (!q2.error) rows = q2.data ?? []
+        if (!q1.error && Array.isArray(q1.data)) {
+          rows = q1.data as unknown as Array<Record<string, unknown>>
         } else {
-          rows = q1.data ?? []
+          const q2 = await supabase!.from('inventory').select('product, qty, image_url')
+          if (!q2.error && Array.isArray(q2.data)) {
+            rows = q2.data as unknown as Array<Record<string, unknown>>
+          }
         }
         if (active && Array.isArray(rows) && rows.length) {
-          const mapped = rows.map((r: any) => ({
-            id: String(r.product ?? ''),
-            category: String(r.category ?? ''),
-            type: String(r.type ?? ''),
-            product: String(r.product ?? ''),
-            qty: Number(r.qty ?? 0),
-            image_url: r.image_url ?? null,
-          }))
+          const mapped = rows.map(r => {
+            const product = String(r['product'] ?? '')
+            const qtyRaw = Number(r['qty'] ?? 0)
+            return {
+              id: product,
+              category: String(r['category'] ?? ''),
+              type: String(r['type'] ?? ''),
+              product,
+              qty: Number.isFinite(qtyRaw) ? qtyRaw : 0,
+              image_url: r['image_url'] == null ? null : String(r['image_url']),
+            }
+          })
           if (mapped.some(m => m.product)) setProducts(mapped)
         }
-      } catch { /* noop */ }
+      } catch { void 0 }
     })()
     return () => { active = false }
-  }, [isSupabaseConfigured])
+  }, [products.length])
   const [importingCashFlow, setImportingCashFlow] = useState(false)
   const [errorCashFlow, setErrorCashFlow] = useState<string | null>(null)
   const [kosiedonTab, setKosiedonTab] = useState<'Cutted' | 'Returned'>('Returned')
@@ -1116,7 +1239,6 @@ function Section({
       }
       setCashFlowRows(prev => {
         const combined = [...prev, ...allRows]
-        // Auto-complete orders
         const completedIds = new Set<string>()
         for (const r of allRows) {
           const oid = field(r, ['Order ID', 'Order Number', 'Order No'], '')
@@ -1126,7 +1248,6 @@ function Section({
           setOrdersShopee(curr => curr.map(o => {
             const oid = field(o, ['Order ID', 'Order Number', 'Order No', 'OrderID', 'Order number'], '')
             if (completedIds.has(oid)) {
-              // Update status to Completed if not already
               return { ...o, Status: 'Completed', 'Order Status': 'Completed' }
             }
             return o
@@ -1337,7 +1458,6 @@ function Section({
         }
       }
       if (Object.keys(sold).length === 0 && Object.keys(restored).length === 0) return
-      // update local products state
       setProducts(prev => {
         const next = prev.map(p => {
           const dec = sold[p.product] ?? 0
@@ -1347,7 +1467,6 @@ function Section({
         })
         return next
       })
-      // update Supabase if configured
       if (isSupabaseConfigured) {
         const all = Array.from(new Set<string>([...Object.keys(sold), ...Object.keys(restored)]))
         for (const name of all) {
@@ -1376,12 +1495,8 @@ function Section({
       }
       try {
         localStorage.setItem('syncedOrderItems', JSON.stringify(Array.from(synced)))
-      } catch {
-        /* ignore */
-      }
-    } catch {
-      /* ignore */
-    }
+      } catch { void 0 }
+    } catch { void 0 }
   }
   type OrderItem = {
     orderId: string
@@ -1788,8 +1903,6 @@ function Section({
     }
   }
 
-  // removed per centralized Files&Data export
-
   function rowsToProducts(items: Row[]): ProductItem[] {
     function pick(obj: Row, keys: string[], fallback: string = ''): string {
       const lower = Object.fromEntries(Object.keys(obj).map(k => [k.toLowerCase(), k]))
@@ -1818,7 +1931,7 @@ function Section({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card text-card-foreground p-3 sm:p-6">
+    <div className="rounded-lg border border-border bg-card text-card-foreground p-3 sm:p-6 max-w-full min-w-0">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
@@ -1849,7 +1962,7 @@ function Section({
         </div>
         <ThemeToggle isDark={isDark} onToggle={onToggleDark} />
       </div>
-      <div className="mt-4 rounded-md border border-border bg-background p-4">
+      <div className="mt-4 rounded-md border border-border bg-background p-4 max-w-full overflow-x-auto">
         {name === 'Dashboard' && (
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -2031,10 +2144,10 @@ function Section({
         )}
         {name === 'Inventory' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
               <div className="text-xs text-muted-foreground">{error ? error : products.length ? `${products.length} items` : 'No items'}</div>
-              <div className="ml-auto" />
-              <label className="inline-flex items-center rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm cursor-pointer">
+              <div className="hidden sm:block ml-auto" />
+              <label className="inline-flex items-center justify-center w-full sm:w-auto rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm cursor-pointer">
                 <input
                   type="file"
                   multiple
@@ -2047,7 +2160,7 @@ function Section({
                 />
                 {importing ? 'Importing…' : 'Import Inventory'}
               </label>
-              <div className="w-[320px] inline-flex items-stretch rounded-md border border-border bg-background text-foreground">
+              <div className="w-full sm:w-[320px] max-w-full inline-flex items-stretch rounded-md border border-border bg-background text-foreground">
                 <select
                   value={searchScope}
                   onChange={e => setSearchScope(e.target.value as 'product' | 'category' | 'type')}
@@ -2072,7 +2185,7 @@ function Section({
                   setEditing(null)
                   setShowModal(true)
                 }}
-                className="inline-flex items-center rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm"
+                className="inline-flex items-center justify-center w-full sm:w-auto rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm"
               >
                 Add Product
               </button>
@@ -2173,7 +2286,7 @@ function Section({
         )}
         {name === 'Expenses' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setExpenseTabMain('Products')}
@@ -2233,9 +2346,9 @@ function Section({
             </div>
             {expenseTabMain === 'Products' ? (
               <>
-                <div className="flex items-center gap-2">
-                  <div className="ml-auto" />
-                  <div className="w-[320px] inline-flex items-stretch rounded-md border border-border bg-background text-foreground">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+                  <div className="hidden sm:block ml-auto" />
+                  <div className="w-full sm:w-[320px] max-w-full inline-flex items-stretch rounded-md border border-border bg-background text-foreground">
                     <input
                       type="text"
                       value={searchAddText}
@@ -2251,7 +2364,7 @@ function Section({
                       setShowAddModal(true)
                       setSearchAddText('')
                     }}
-                    className="inline-flex items-center rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm"
+                    className="inline-flex items-center justify-center w-full sm:w-auto rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm"
                     title="Add Expenses"
                   >
                     Add Expenses
@@ -2327,9 +2440,9 @@ function Section({
               </>
             ) : (
               <>
-                <div className="flex items-center gap-2">
-                  <div className="ml-auto" />
-                  <div className="w-[320px] inline-flex items-stretch rounded-md border border-border bg-background text-foreground">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+                  <div className="hidden sm:block ml-auto" />
+                  <div className="w-full sm:w-[320px] max-w-full inline-flex items-stretch rounded-md border border-border bg-background text-foreground">
                     <input
                       type="text"
                       value={searchAddText}
@@ -2345,7 +2458,7 @@ function Section({
                       setShowAddModal(true)
                       setSearchAddText('')
                     }}
-                    className="inline-flex items-center rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm"
+                    className="inline-flex items-center justify-center w-full sm:w-auto rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm"
                     title="Add Expenses"
                   >
                     Add Expenses
@@ -2597,12 +2710,11 @@ function Section({
                 </div>
               </div>
             )}
-            {/* Product costing modal removed as per request */}
           </div>
         )}
         {name === 'OrderSales' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
               <div className="text-xs text-muted-foreground">
                 {orderSalesSub === 'Shopee'
                   ? ordersShopee.length
@@ -2617,9 +2729,9 @@ function Section({
                   {unknownCount} item(s) missing order number
                 </div>
               )}
-              <div className="ml-auto" />
+              <div className="hidden sm:block ml-auto" />
               {orderSalesSub === 'Shopee' ? (
-                <label className="inline-flex items-center rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm cursor-pointer">
+                <label className="inline-flex items-center justify-center w-full sm:w-auto rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm cursor-pointer">
                   <input
                     type="file"
                     multiple
@@ -2633,7 +2745,7 @@ function Section({
                   {importingShopee ? 'Importing…' : 'Import Shopee'}
                 </label>
               ) : (
-                <label className="inline-flex items-center rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm cursor-pointer">
+                <label className="inline-flex items-center justify-center w-full sm:w-auto rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm cursor-pointer">
                   <input
                     type="file"
                     multiple
@@ -2647,7 +2759,7 @@ function Section({
                   {importingTiktok ? 'Importing…' : 'Import Tiktok'}
                 </label>
               )}
-              <div className="w-[320px] inline-flex items-stretch rounded-md border border-border bg-background text-foreground">
+              <div className="w-full sm:w-[320px] max-w-full inline-flex items-stretch rounded-md border border-border bg-background text-foreground">
                 <select
                   value={orderSearchScope}
                   onChange={e => setOrderSearchScope(e.target.value as 'order' | 'buyer' | 'product' | 'all')}
@@ -2670,7 +2782,7 @@ function Section({
               <button
                 type="button"
                 onClick={() => setShowAddSale(true)}
-                className="inline-flex items-center rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm"
+                className="inline-flex items-center justify-center w-full sm:w-auto rounded-md bg-accent text-accent-foreground px-3 py-2 text-sm"
                 title={`Add Sale (${orderSalesSub})`}
               >
                 Add Sale ({orderSalesSub})
@@ -2864,7 +2976,7 @@ function Section({
                     </button>
                   </div>
                   <div className="p-4 space-y-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => setEditTab('order')}
@@ -3408,30 +3520,28 @@ function Section({
                             <td className="px-3 py-2">
                               <button
                                 onClick={() => {
-                                  // Action: Shipped -> Deduct inventory and remove from list
                                   if (confirm('Mark as Shipped? This will deduct inventory.')) {
                                     const qtyToDeduct = k.qty || 1
-                                    // 1. Deduct inventory
-                                     setProducts(prev => {
-                                       const next = prev.map(p => {
-                                         // Fuzzy match product
-                                         if (p.product === k.product || p.product.includes(k.product)) {
-                                           return { ...p, qty: Math.max(0, p.qty - qtyToDeduct) }
-                                         }
-                                         return p
-                                       })
-                                       if (isSupabaseConfigured) {
-                                          const p = next.find(x => x.product === k.product || x.product.includes(k.product))
-                                          if (p) {
-                                            supabase!.from('inventory').update({ qty: p.qty }).eq('product', p.product).then(() => {})
-                                          }
-                                       }
-                                       return next
-                                     })
-                                    // 2. Remove from list
+                                    setProducts(prev => {
+                                      const next = prev.map(p => {
+                                        if (p.product === k.product || p.product.includes(k.product)) {
+                                          return { ...p, qty: Math.max(0, p.qty - qtyToDeduct) }
+                                        }
+                                        return p
+                                      })
+                                      if (isSupabaseConfigured) {
+                                        const p = next.find(x => x.product === k.product || x.product.includes(k.product))
+                                        if (p) {
+                                          supabase!.from('inventory').update({ qty: p.qty }).eq('product', p.product).then(() => {})
+                                        }
+                                      }
+                                      return next
+                                    })
                                     setKosiedonCutsEntries(prev => {
                                       const next = prev.filter(x => x.id !== k.id)
-                                      localStorage.setItem('kosiedonCutsEntries', JSON.stringify(next))
+                                      try {
+                                        localStorage.setItem('kosiedonCutsEntries', JSON.stringify(next))
+                                      } catch { void 0 }
                                       return next
                                     })
                                   }
@@ -3463,7 +3573,6 @@ function Section({
                     }
                     return next
                   })
-                  // Deduct from inventory
                   const cutQty = toNum(String(entry.qty), 0)
                   setProducts(prev => {
                     const next = prev.map(p => {
@@ -3596,9 +3705,7 @@ function InventoryModal({
             if (insError) throw insError
             id = (data?.[0]?.id as string) ?? id
           }
-        } catch {
-          /* fall back to local save */
-        }
+        } catch { void 0 }
       }
       onSaved({
         id,
