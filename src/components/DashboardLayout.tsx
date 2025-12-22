@@ -78,9 +78,6 @@ export default function DashboardLayout() {
         await supabase!.auth.signOut()
       } catch { void 0 }
     }
-    try {
-      localStorage.clear()
-    } catch { void 0 }
     window.location.reload()
   }
 
