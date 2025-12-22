@@ -72,7 +72,12 @@ export default function DashboardLayout() {
   const [orderSalesOpen, setOrderSalesOpen] = useState(true)
   const [financeOpen, setFinanceOpen] = useState(true)
   const [orderSalesSub, setOrderSalesSub] = useState<'Shopee' | 'Tiktok'>('Shopee')
-  function handleLogout() {
+  async function handleLogout() {
+    if (isSupabaseConfigured) {
+      try {
+        await supabase!.auth.signOut()
+      } catch { void 0 }
+    }
     try {
       localStorage.clear()
     } catch { void 0 }
@@ -1053,6 +1058,8 @@ function Section({
       return []
     }
   })
+  const [userId, setUserId] = useState<string | null>(null)
+  const [dbLoaded, setDbLoaded] = useState(false)
   
   useEffect(() => {
     try { localStorage.setItem('ordersShopee', JSON.stringify(ordersShopee)) } catch { void 0 }
@@ -1066,6 +1073,81 @@ function Section({
   useEffect(() => {
     try { localStorage.setItem('products', JSON.stringify(products)) } catch { void 0 }
   }, [products])
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      if (!isSupabaseConfigured) return
+      try {
+        const { data } = await supabase!.auth.getUser()
+        if (active) setUserId(data.user?.id ?? null)
+      } catch { void 0 }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      if (!isSupabaseConfigured) return
+      if (!userId) return
+      if (dbLoaded) return
+      try {
+        const rowsToHeaders = (rows: Row[]) => {
+          const first = rows[0]
+          if (!first) return []
+          return Object.keys(first).map((header, index) => ({ col: '', header, index }))
+        }
+
+        const loadRows = async (args: {
+          dataset: 'orders' | 'cashflow'
+          platform: 'Shopee' | 'Tiktok' | 'Global'
+        }): Promise<Row[]> => {
+          const all: Row[] = []
+          const pageSize = 1000
+          let from = 0
+          while (true) {
+            const to = from + pageSize - 1
+            const { data, error } = await supabase!
+              .from('tpims_import_rows')
+              .select('row')
+              .eq('user_id', userId)
+              .eq('dataset', args.dataset)
+              .eq('platform', args.platform)
+              .range(from, to)
+            if (error) throw error
+            const rows = (data ?? [])
+              .map(d => (d as unknown as { row: Row }).row)
+              .filter(Boolean)
+            all.push(...rows)
+            if (rows.length < pageSize) break
+            from += pageSize
+          }
+          return all
+        }
+
+        const shopee = await loadRows({ dataset: 'orders', platform: 'Shopee' })
+        const tiktok = await loadRows({ dataset: 'orders', platform: 'Tiktok' })
+        const cashflow = await loadRows({ dataset: 'cashflow', platform: 'Global' })
+        if (!active) return
+        if (shopee.length) {
+          setOrdersShopee(shopee)
+          setOrdersShopeeHeaders(rowsToHeaders(shopee))
+        }
+        if (tiktok.length) {
+          setOrdersTiktok(tiktok)
+          setOrdersTiktokHeaders(rowsToHeaders(tiktok))
+        }
+        if (cashflow.length) setCashFlowRows(cashflow)
+      } catch { void 0 }
+      if (active) setDbLoaded(true)
+    })()
+    return () => {
+      active = false
+    }
+  }, [dbLoaded, userId])
   
   useEffect(() => {
     let active = true
@@ -1230,6 +1312,73 @@ function Section({
     }
     return iso
   }
+
+  function hashString(input: string): string {
+    let h = 5381
+    for (let i = 0; i < input.length; i++) {
+      h = ((h << 5) + h) ^ input.charCodeAt(i)
+    }
+    return (h >>> 0).toString(36)
+  }
+
+  function stableRowString(row: Row): string {
+    const keys = Object.keys(row).sort((a, b) => a.localeCompare(b))
+    return keys.map(k => `${k}:${String(row[k] ?? '')}`).join('|')
+  }
+
+  function makeOrderKey(platform: 'Shopee' | 'Tiktok', row: Row): string {
+    const orderId = field(row, ['Order ID', 'Order Number', 'Order No', 'OrderID', 'Order number'], '').trim()
+    const product = field(row, ['Product Name', 'Product', 'Products'], '').trim()
+    const variation = field(row, ['Variation Name', 'Variation'], '').trim()
+    const qty = toNum(field(row, ['Quantity', 'Qty', 'quanity'], '1'), 1)
+    const price = toNum(field(row, ['Item Price', 'Price', 'Item Price'], '0'), 0)
+    const date = formatDate(
+      field(row, ['DATE', 'Date', 'Created Time', 'Time Created', 'delivered date / estimated payout date', 'PAYOUT COMPLETED DATE'], '')
+    )
+    const base = `${platform}|${orderId}|${product}|${variation}|${qty}|${price}|${date}`
+    if (orderId || product || variation) return base
+    return `${platform}|h:${hashString(stableRowString(row))}`
+  }
+
+  function makeCashFlowKey(row: Row): string {
+    const orderId = field(row, ['Order ID', 'Order Number', 'Order No'], '').trim()
+    const date = formatDate(field(row, ['DATE', 'Date'], ''))
+    const type = field(row, ['Type', 'Transaction Type'], '').trim()
+    const direction = field(row, ['Money Direction', 'Direction'], '').trim()
+    const amount = toNum(field(row, ['Amount', 'Total'], '0'), 0)
+    const status = field(row, ['Status'], '').trim()
+    const base = `${date}|${orderId}|${type}|${direction}|${amount}|${status}`
+    if (orderId || type || amount) return base
+    return `h:${hashString(stableRowString(row))}`
+  }
+
+  async function upsertImportRows(args: {
+    userId: string
+    dataset: 'orders' | 'cashflow'
+    platform: 'Shopee' | 'Tiktok' | 'Global'
+    rows: Row[]
+  }) {
+    if (!isSupabaseConfigured) return
+    if (!args.rows.length) return
+
+    const payload = args.rows.map(r => ({
+      user_id: args.userId,
+      dataset: args.dataset,
+      platform: args.platform,
+      row_key: args.dataset === 'cashflow' ? makeCashFlowKey(r) : makeOrderKey(args.platform as 'Shopee' | 'Tiktok', r),
+      row: r,
+    }))
+
+    const chunkSize = 250
+    for (let i = 0; i < payload.length; i += chunkSize) {
+      const chunk = payload.slice(i, i + chunkSize)
+      const { error } = await supabase!
+        .from('tpims_import_rows')
+        .upsert(chunk, { onConflict: 'user_id,dataset,platform,row_key' })
+      if (error) throw error
+    }
+  }
+
   async function handleImportCashFlow(files: FileList) {
     setImportingCashFlow(true)
     setErrorCashFlow(null)
@@ -1277,6 +1426,11 @@ function Section({
           return dateB.localeCompare(dateA)
         })
       })
+      if (userId) {
+        try {
+          await upsertImportRows({ userId, dataset: 'cashflow', platform: 'Global', rows: allRows })
+        } catch { void 0 }
+      }
     } catch (e: unknown) {
       setErrorCashFlow(e instanceof Error ? e.message : 'Failed to import CashFlow data')
     } finally {
@@ -1657,7 +1811,24 @@ function Section({
         allRows.push(...(json as Row[]))
       }
       const mapped = rowsToProducts(allRows)
-      if (mapped.length) setProducts(mapped)
+      if (mapped.length) {
+        setProducts(mapped)
+        if (isSupabaseConfigured) {
+          try {
+            const payload = mapped.map(p => ({
+              category: p.category,
+              type: p.type,
+              product: p.product,
+              qty: p.qty,
+              image_url: p.image_url,
+            }))
+            const chunkSize = 250
+            for (let i = 0; i < payload.length; i += chunkSize) {
+              await supabase!.from('inventory').upsert(payload.slice(i, i + chunkSize), { onConflict: 'product' })
+            }
+          } catch { void 0 }
+        }
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to import')
     } finally {
@@ -1700,6 +1871,11 @@ function Section({
 
       setOrdersShopee(prev => [...prev, ...allRows])
       setOrdersShopeeHeaders(headersArr)
+      if (userId) {
+        try {
+          await upsertImportRows({ userId, dataset: 'orders', platform: 'Shopee', rows: allRows })
+        } catch { void 0 }
+      }
 
       try {
         const grouped: Record<string, { date: string; orderId: string; amount: number }> = {}
@@ -1822,6 +1998,11 @@ function Section({
 
       setOrdersTiktok(prev => [...prev, ...allRows])
       setOrdersTiktokHeaders(headersArr)
+      if (userId) {
+        try {
+          await upsertImportRows({ userId, dataset: 'orders', platform: 'Tiktok', rows: allRows })
+        } catch { void 0 }
+      }
 
       try {
         const grouped: Record<string, { date: string; orderId: string; amount: number }> = {}
