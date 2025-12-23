@@ -1155,13 +1155,26 @@ function Section({
       if (inventoryLoaded) return
       try {
         let rows: Array<Record<string, unknown>> = []
-        const q1 = await supabase!.from('inventory').select('product, qty, image_url, category, type')
+        const q1 = await supabase!
+          .from('inventory')
+          .select('product, qty, image_url, category, type')
+          .eq('user_id', userId)
         if (!q1.error && Array.isArray(q1.data)) {
           rows = q1.data as unknown as Array<Record<string, unknown>>
         } else {
-          const q2 = await supabase!.from('inventory').select('product, qty, image_url')
-          if (!q2.error && Array.isArray(q2.data)) {
-            rows = q2.data as unknown as Array<Record<string, unknown>>
+          const q1b = await supabase!.from('inventory').select('product, qty, image_url, category, type')
+          if (!q1b.error && Array.isArray(q1b.data)) {
+            rows = q1b.data as unknown as Array<Record<string, unknown>>
+          } else {
+            const q2 = await supabase!.from('inventory').select('product, qty, image_url').eq('user_id', userId)
+            if (!q2.error && Array.isArray(q2.data)) {
+              rows = q2.data as unknown as Array<Record<string, unknown>>
+            } else {
+              const q2b = await supabase!.from('inventory').select('product, qty, image_url')
+              if (!q2b.error && Array.isArray(q2b.data)) {
+                rows = q2b.data as unknown as Array<Record<string, unknown>>
+              }
+            }
           }
         }
         if (active && Array.isArray(rows) && rows.length) {
@@ -1178,6 +1191,48 @@ function Section({
             }
           })
           if (mapped.some(m => m.product)) setProducts(mapped)
+        } else if (active) {
+          let local: Array<{
+            category?: unknown
+            type?: unknown
+            product?: unknown
+            qty?: unknown
+            image_url?: unknown
+          }> = []
+          try {
+            const raw = localStorage.getItem('products') ?? '[]'
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed)) local = parsed as typeof local
+          } catch { void 0 }
+          const toSync = local
+            .map(p => ({
+              category: String(p.category ?? ''),
+              type: String(p.type ?? ''),
+              product: String(p.product ?? ''),
+              qty: Number(p.qty ?? 0),
+              image_url: p.image_url == null ? null : String(p.image_url),
+            }))
+            .filter(p => p.product)
+          if (toSync.length) {
+            try {
+              const chunkSize = 250
+              for (let i = 0; i < toSync.length; i += chunkSize) {
+                await supabase!
+                  .from('inventory')
+                  .upsert(
+                    toSync.slice(i, i + chunkSize).map(p => ({ ...p, user_id: userId })),
+                    { onConflict: 'user_id,product' },
+                  )
+              }
+            } catch {
+              try {
+                const chunkSize = 250
+                for (let i = 0; i < toSync.length; i += chunkSize) {
+                  await supabase!.from('inventory').upsert(toSync.slice(i, i + chunkSize), { onConflict: 'product' })
+                }
+              } catch { void 0 }
+            }
+          }
         }
       } catch { void 0 }
       if (active) setInventoryLoaded(true)
@@ -1628,29 +1683,61 @@ function Section({
         })
         return next
       })
-      if (isSupabaseConfigured) {
+      if (isSupabaseConfigured && userId) {
         const all = Array.from(new Set<string>([...Object.keys(sold), ...Object.keys(restored)]))
         for (const name of all) {
           try {
-            const { data } = await supabase!.from('inventory').select('id, qty').eq('product', name).limit(1)
-            const current = Number(data?.[0]?.qty ?? 0)
+            let current = 0
+            try {
+              const { data } = await supabase!
+                .from('inventory')
+                .select('qty')
+                .eq('user_id', userId)
+                .eq('product', name)
+                .limit(1)
+              current = Number(data?.[0]?.qty ?? 0)
+            } catch {
+              const { data } = await supabase!.from('inventory').select('qty').eq('product', name).limit(1)
+              current = Number(data?.[0]?.qty ?? 0)
+            }
             const dec = sold[name] ?? 0
             const inc = restored[name] ?? 0
             const newQty = Math.max(0, current - dec + inc)
-            await supabase!.from('inventory').update({ qty: newQty }).eq('product', name)
+            try {
+              await supabase!
+                .from('inventory')
+                .update({ qty: newQty })
+                .eq('user_id', userId)
+                .eq('product', name)
+            } catch {
+              await supabase!.from('inventory').update({ qty: newQty }).eq('product', name)
+            }
           } catch { void 0 }
         }
         for (const ret of returnsLog) {
           try {
-            await supabase!.from('kosiedoncuts').insert({
-              order_id: ret.orderId,
-              product: ret.product,
-              variation: ret.variation,
-              qty: ret.qty,
-              platform,
-              date: ret.date,
-              status: ret.status,
-            })
+            try {
+              await supabase!.from('kosiedoncuts').insert({
+                user_id: userId,
+                order_id: ret.orderId,
+                product: ret.product,
+                variation: ret.variation,
+                qty: ret.qty,
+                platform,
+                date: ret.date,
+                status: ret.status,
+              })
+            } catch {
+              await supabase!.from('kosiedoncuts').insert({
+                order_id: ret.orderId,
+                product: ret.product,
+                variation: ret.variation,
+                qty: ret.qty,
+                platform,
+                date: ret.date,
+                status: ret.status,
+              })
+            }
           } catch { void 0 }
         }
       }
@@ -1813,9 +1900,10 @@ function Section({
       const mapped = rowsToProducts(allRows)
       if (mapped.length) {
         setProducts(mapped)
-        if (isSupabaseConfigured) {
+        if (isSupabaseConfigured && userId) {
           try {
             const payload = mapped.map(p => ({
+              user_id: userId,
               category: p.category,
               type: p.type,
               product: p.product,
@@ -1824,9 +1912,23 @@ function Section({
             }))
             const chunkSize = 250
             for (let i = 0; i < payload.length; i += chunkSize) {
-              await supabase!.from('inventory').upsert(payload.slice(i, i + chunkSize), { onConflict: 'product' })
+              await supabase!.from('inventory').upsert(payload.slice(i, i + chunkSize), { onConflict: 'user_id,product' })
             }
-          } catch { void 0 }
+          } catch {
+            try {
+              const payload = mapped.map(p => ({
+                category: p.category,
+                type: p.type,
+                product: p.product,
+                qty: p.qty,
+                image_url: p.image_url,
+              }))
+              const chunkSize = 250
+              for (let i = 0; i < payload.length; i += chunkSize) {
+                await supabase!.from('inventory').upsert(payload.slice(i, i + chunkSize), { onConflict: 'product' })
+              }
+            } catch { void 0 }
+          }
         }
       }
     } catch (e: unknown) {
@@ -2451,6 +2553,7 @@ function Section({
             {showModal && (
               <InventoryModal
                 initial={editing ?? undefined}
+                userId={userId}
                 onClose={() => {
                   setShowModal(false)
                   setEditing(null)
@@ -3727,7 +3830,11 @@ function Section({
                                       if (isSupabaseConfigured) {
                                         const p = next.find(x => x.product === k.product || x.product.includes(k.product))
                                         if (p) {
-                                          supabase!.from('inventory').update({ qty: p.qty }).eq('product', p.product).then(() => {})
+                                          if (userId) {
+                                            supabase!.from('inventory').update({ qty: p.qty }).eq('user_id', userId).eq('product', p.product).then(() => {})
+                                          } else {
+                                            supabase!.from('inventory').update({ qty: p.qty }).eq('product', p.product).then(() => {})
+                                          }
                                         }
                                       }
                                       return next
@@ -3781,7 +3888,11 @@ function Section({
                     if (isSupabaseConfigured) {
                       const p = next.find(x => x.product === entry.product)
                       if (p) {
-                         supabase!.from('inventory').update({ qty: p.qty }).eq('product', entry.product).then(() => {})
+                         if (userId) {
+                           supabase!.from('inventory').update({ qty: p.qty }).eq('user_id', userId).eq('product', entry.product).then(() => {})
+                         } else {
+                           supabase!.from('inventory').update({ qty: p.qty }).eq('product', entry.product).then(() => {})
+                         }
                       }
                     }
                     return next
@@ -3822,6 +3933,7 @@ function InventoryModal({
   initial,
   onClose,
   onSaved,
+  userId,
 }: {
   initial?: {
     id: string
@@ -3840,6 +3952,7 @@ function InventoryModal({
     qty: number
     image_url: string | null
   }) => void
+  userId: string | null
 }) {
   const [category, setCategory] = useState(initial?.category ?? '')
   const [type, setType] = useState(initial?.type ?? '')
@@ -3862,7 +3975,7 @@ function InventoryModal({
     setError(null)
     try {
       let imageUrl = previewUrl ?? null
-      let id = initial?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const id = product || initial?.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`
       if (isSupabaseConfigured) {
         try {
           if (imageFile) {
@@ -3872,33 +3985,60 @@ function InventoryModal({
             const publicUrl = supabase!.storage.from('images').getPublicUrl(path)
             imageUrl = publicUrl.data.publicUrl
           }
-          if (initial?.id) {
-            const { error: upError } = await supabase!
-              .from('inventory')
-              .update({
+          if (userId) {
+            try {
+              const payload = {
+                user_id: userId,
                 category,
                 type,
                 product,
                 qty,
                 image_url: imageUrl,
-              })
-              .eq('id', initial.id)
-            if (upError) throw upError
-            id = initial.id
+              }
+              if (initial?.product && initial.product !== product) {
+                const { error: upError } = await supabase!
+                  .from('inventory')
+                  .update(payload)
+                  .eq('user_id', userId)
+                  .eq('product', initial.product)
+                if (upError) throw upError
+              } else {
+                const { error: upError } = await supabase!
+                  .from('inventory')
+                  .upsert(payload, { onConflict: 'user_id,product' })
+                if (upError) throw upError
+              }
+            } catch {
+              const payload = {
+                category,
+                type,
+                product,
+                qty,
+                image_url: imageUrl,
+              }
+              if (initial?.product && initial.product !== product) {
+                const { error: upError } = await supabase!.from('inventory').update(payload).eq('product', initial.product)
+                if (upError) throw upError
+              } else {
+                const { error: upError } = await supabase!.from('inventory').upsert(payload, { onConflict: 'product' })
+                if (upError) throw upError
+              }
+            }
           } else {
-            const { data, error: insError } = await supabase!
-              .from('inventory')
-              .insert({
-                category,
-                type,
-                product,
-                qty,
-                image_url: imageUrl,
-              })
-              .select()
-              .limit(1)
-            if (insError) throw insError
-            id = (data?.[0]?.id as string) ?? id
+            const payload = {
+              category,
+              type,
+              product,
+              qty,
+              image_url: imageUrl,
+            }
+            if (initial?.product && initial.product !== product) {
+              const { error: upError } = await supabase!.from('inventory').update(payload).eq('product', initial.product)
+              if (upError) throw upError
+            } else {
+              const { error: upError } = await supabase!.from('inventory').upsert(payload, { onConflict: 'product' })
+              if (upError) throw upError
+            }
           }
         } catch { void 0 }
       }
