@@ -1057,6 +1057,7 @@ function Section({
   })
   const [userId, setUserId] = useState<string | null>(null)
   const [dbLoaded, setDbLoaded] = useState(false)
+  const [inventoryLoaded, setInventoryLoaded] = useState(false)
   
   useEffect(() => {
     try { localStorage.setItem('ordersShopee', JSON.stringify(ordersShopee)) } catch { void 0 }
@@ -1150,7 +1151,8 @@ function Section({
     let active = true
     ;(async () => {
       if (!isSupabaseConfigured) return
-      if (products.length > 0) return
+      if (!userId) return
+      if (inventoryLoaded) return
       try {
         let rows: Array<Record<string, unknown>> = []
         const q1 = await supabase!.from('inventory').select('product, qty, image_url, category, type')
@@ -1178,9 +1180,10 @@ function Section({
           if (mapped.some(m => m.product)) setProducts(mapped)
         }
       } catch { void 0 }
+      if (active) setInventoryLoaded(true)
     })()
     return () => { active = false }
-  }, [products.length])
+  }, [inventoryLoaded, userId])
   const [importingCashFlow, setImportingCashFlow] = useState(false)
   const [errorCashFlow, setErrorCashFlow] = useState<string | null>(null)
   const [kosiedonTab, setKosiedonTab] = useState<'Cutted' | 'Returned'>('Returned')
